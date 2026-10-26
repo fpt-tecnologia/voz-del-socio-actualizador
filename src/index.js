@@ -82,7 +82,7 @@ export async function correr(env, origen) {
     try {
       await paso('Buscando reportes de Axol');
       const desde = wmAxol ? wmAxol + 'T23:59:59Z' : null;
-      const ms = [...await buscarCorreos(env, { buscar: 'FPT weekly report', de: 'rafael@axolmarketing.com', desde }), ...await buscarCorreos(env, { buscar: 'Reporte semanal de redes sociales', de: 'jaime@fpt.com.mx', desde })]
+      const ms = [...await buscarCorreos(env, { buscar: 'FPT weekly report', de: env.AXOL_FROM, desde }), ...await buscarCorreos(env, { buscar: 'Reporte semanal de redes sociales', de: env.REDES_FROM, desde })]
         .filter((m) => !hechos.has(m.id)).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? -1 : 1));
       for (const m of ms) {
         await paso('Leyendo: ' + m.subject);

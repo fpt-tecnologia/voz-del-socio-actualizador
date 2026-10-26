@@ -8,5 +8,7 @@ const sol = await (await DATOS.get('meta/solicitud.json'))?.json().catch(() => n
 const origen = process.env.GITHUB_EVENT_NAME === 'schedule' ? 'programada' : `botón (${sol?.por || process.env.GITHUB_ACTOR || 'manual'})`;
 await correr(env, origen);
 const est = await (await DATOS.get('meta/estado.json')).json();
-console.log(JSON.stringify({ estado: est.estado, resumen: est.resumen, errores: est.errores, pasos: est.pasos }, null, 2));
+// El repositorio es público y sus logs también: aquí solo se imprimen conteos. El detalle (fuentes, errores) queda en meta/estado.json, que solo se ve con cuenta @fpt.com.mx en el dashboard.
+const r = est.resumen || {};
+console.log(`estado: ${est.estado} · fuentes nuevas: ${(r.fuentes || []).length} · comentarios nuevos: ${r.comentarios_nuevos || 0} · errores: ${(est.errores || []).length}`);
 if (est.estado === 'error') process.exit(1);
