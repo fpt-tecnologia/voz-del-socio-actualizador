@@ -27,10 +27,10 @@ export async function correr(env, origen) {
     const proc = await leer(env, 'meta/procesados.json', { ids: [] }); const hechos = new Set(proc.ids);
     const wmNps = maxDe(state.nps_semanal, 'periodo_fin'), wmAxol = maxDe(state.axol_semanal, 'periodo_fin'), wmMes = maxDe(state.mensual, 'mes'), wmFp = maxDe(state.footprint_regiones, 'trimestre');
 
-    // 1) SentiOne (máximo una vez por hora por el límite de 30 llamadas/hora)
+    // 1) SentiOne: una extracción por semana (créditos de API limitados). Corre en la primera corrida a partir de 6.5 días de la anterior.
     try {
       const ult = await leer(env, 'meta/sentione.json', {});
-      if (!ult.en || Date.now() - Date.parse(ult.en) > 55 * 60e3) {
+      if (!ult.en || Date.now() - Date.parse(ult.en) > 6.5 * 864e5) {
         await paso('Descargando menciones de SentiOne');
         const { menciones, consultas } = await descargarMenciones(env.SENTIONE_KEY);
         await escribir(env, 'meta/sentione.json', { en: ahora(), consultas });
