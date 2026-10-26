@@ -26,6 +26,8 @@ jobs:
           GRAPH_CLIENT_ID: ${{ vars.GRAPH_CLIENT_ID }}
           GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
           MAILBOX: ${{ vars.MAILBOX }}
+          AXOL_FROM: ${{ vars.AXOL_FROM }}
+          REDES_FROM: ${{ vars.REDES_FROM }}
           SP_HOST: ${{ vars.SP_HOST }}
           SP_SITE: ${{ vars.SP_SITE }}
           AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
