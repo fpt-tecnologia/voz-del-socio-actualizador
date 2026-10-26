@@ -36,7 +36,14 @@ export async function extraerReporte(env, { texto, imagenes = [], contexto, foot
   const meta = Object.entries(contexto).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('\n');
   const content = [{ type: 'text', text: `${pide}\nEn cada fila pon fuente_doc y fuente_uri (o reporte_url) con estos valores.\n\nCONTEXTO\n${meta}\n\nDOCUMENTO\n${(texto || '').slice(0, 350000)}` }];
   for (const im of imagenes.slice(0, 8)) content.push({ type: 'image_url', image_url: { url: `data:${im.tipo};base64,${im.b64}` } });
-  return chat(env, [{ role: 'system', content: SISTEMA }, { role: 'user', content }]);
+  const d = await chat(env, [{ role: 'system', content: SISTEMA }, { role: 'user', content }]);
+  // El modelo a veces devuelve una sección como objeto suelto en vez de lista: se normaliza a lista de filas
+  const out = {};
+  for (const [k, v] of Object.entries(d || {})) {
+    if (Array.isArray(v)) out[k] = v.filter((r) => r && typeof r === 'object' && !Array.isArray(r));
+    else if (v && typeof v === 'object') out[k] = Object.values(v).every((x) => x && typeof x === 'object' && !Array.isArray(x)) && Object.keys(v).length ? Object.values(v) : [v];
+  }
+  return out;
 }
 
 // Clasifica menciones de SentiOne: tema, si se incluye y el club mencionado.
