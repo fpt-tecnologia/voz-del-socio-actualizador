@@ -1,0 +1,9 @@
+{
+  "name": "voz-del-socio-actualizador",
+  "private": true,
+  "type": "module",
+  "description": "Actualiza el dashboard Voz del Socio (listening.fpt.com.mx): correo y SharePoint por Microsoft Graph, SentiOne y Azure OpenAI; publica en Cloudflare R2.",
+  "scripts": { "actualizar": "node src/run.mjs" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "fflate": "0.8.2", "unpdf": "0.12.1" }
+}
