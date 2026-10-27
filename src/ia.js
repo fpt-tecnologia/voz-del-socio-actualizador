@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 const SCHEMA = readFileSync(new URL('./SCHEMA.md', import.meta.url), 'utf8');
 import { TEMAS } from './catalogo.js';
 
-async function chat(env, messages, maxTokens = 16000) {
+export async function chat(env, messages, maxTokens = 16000) {
   const url = `${env.AZURE_OPENAI_ENDPOINT.replace(/\/$/, '')}/openai/deployments/${env.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=${env.AZURE_OPENAI_API_VERSION || '2024-10-21'}`;
   for (let intento = 0; intento < 3; intento++) {
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'api-key': env.AZURE_OPENAI_KEY },

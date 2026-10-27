@@ -5,6 +5,7 @@ import { buscarCorreos, adjuntos, cuerpoTexto, buscarArchivos, descargar } from 
 import { aTexto, esImagen, b64, pptxTexto } from './texto.js';
 import { extraerReporte, clasificarMenciones } from './ia.js';
 import { descargarMenciones, aComentarios } from './sentione.js';
+import { generarRecomendaciones } from './recomendaciones.js';
 
 const DATASETS = ['comentarios', 'nps_semanal', 'nps_clubes', 'nps_mensual', 'sl_semanal', 'sl_canales', 'axol_semanal', 'mensual', 'insights', 'clubes', 'footprint_regiones', 'footprint_clubes', 'footprint_resumen'];
 const MESES = { ENERO: '01', FEBRERO: '02', MARZO: '03', ABRIL: '04', MAYO: '05', JUNIO: '06', JULIO: '07', AGOSTO: '08', SEPTIEMBRE: '09', OCTUBRE: '10', NOVIEMBRE: '11', DICIEMBRE: '12' };
@@ -181,6 +182,18 @@ export async function correr(env, origen) {
         await escribir(env, b.key, b.fi);
       }
     }
+    // 8) Qué mejorar: recomendaciones con IA cuando entran datos nuevos o la última tiene más de 7 días
+    try {
+      const prevRec = await leer(env, 'data/recomendaciones.json', null);
+      const vieja = !prevRec?.[0]?.generado_en || Date.now() - Date.parse(prevRec[0].generado_en) > 7 * 864e5;
+      if (resumen.comentarios_nuevos > 0 || fpNuevo || vieja) {
+        await paso('Generando recomendaciones de mejora');
+        const st2 = {}; for (const d of DATASETS) st2[d] = (await leer(env, `data/${d}.json`, [])) || [];
+        const rec = await generarRecomendaciones(env, st2);
+        if (rec) { await escribir(env, 'data/recomendaciones.json', [rec]); resumen.recomendaciones = rec.items.length; }
+      }
+    } catch (e) { errores.push('Recomendaciones: ' + e.message); }
+
     Object.assign(est, { estado: errores.length ? 'ok_con_errores' : 'ok', fin: ahora(), resumen, errores });
     await escribir(env, 'meta/estado.json', est);
     await escribir(env, 'meta/ultima.json', { fin: est.fin, origen, resumen, errores });
