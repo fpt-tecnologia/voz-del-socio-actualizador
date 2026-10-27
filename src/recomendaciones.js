@@ -57,7 +57,8 @@ Reglas:
 - Agrupa: si el mismo tema pega en varios clubes, haz UNA recomendación de cadena o región y lista los clubes; si es un club muy concentrado, recomendación de club.
 - La acción debe ser concreta y ejecutable en 2–4 semanas (qué, dónde, quién), no genérica.
 - responsable: una de ${JSON.stringify(AREAS)}.
-- ejemplos: hasta 4 ids de la lista "ejemplos" que respalden la recomendación.
+- ejemplos: hasta 4 ids de la lista "ejemplos" que respalden la recomendación. Nunca pongas ids en "evidencia" ni en otros textos.
+- clubes: nombres EXACTOS como aparecen en los datos (campo club), sin el conteo entre paréntesis.
 Responde JSON: {"resumen": "2 frases con lo más urgente", "items": [{"prioridad": "alta|media|baja", "ambito": "Cadena|Región|Club", "region": "", "club": "", "clubes": [""], "tema": "", "titulo": "máx. 12 palabras", "problema": "1–2 frases", "evidencia": ["cifras concretas de los datos"], "accion": "qué hacer, concreto", "responsable": "", "kpi": "cómo saber si funcionó", "ejemplos": ["id"]}]}
 Entre 6 y 12 items, ordenados de mayor a menor prioridad.` }, { role: 'user', content: JSON.stringify(ctx) }], 8000);
   const ids = new Set(st.comentarios.map((r) => r.id)), clubes = new Set(st.clubes.map((c) => c.club));
