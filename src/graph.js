@@ -38,6 +38,16 @@ export async function adjuntos(env, msgId) {
 }
 export const cuerpoTexto = (m) => (m.body?.content || '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>|<\/tr>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 
+// Todos los correos de un buzón (incluye Correo no deseado) recibidos después de `desde`, del más viejo al más nuevo
+export async function correosDesde(env, mailbox, desde, max = 40) {
+  const q = new URLSearchParams({ $top: String(max), $orderby: 'receivedDateTime asc', $select: 'id,subject,from,receivedDateTime,body,parentFolderId' });
+  if (desde) q.set('$filter', `receivedDateTime gt ${desde}`);
+  const j = await g(env, `/users/${encodeURIComponent(mailbox)}/messages?${q}`);
+  return j.value || [];
+}
+// Cuerpo en texto conservando las ligas como "texto [url]"
+export const cuerpoConLigas = (m) => cuerpoTexto({ body: { content: (m.body?.content || '').replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (x, u, t) => ` ${t} [${u.replace(/&amp;/g, '&')}] `) } });
+
 // SharePoint: sitio por ruta, búsqueda de archivos y descarga
 let sitioId = null;
 export async function sitio(env) {

@@ -78,7 +78,7 @@ export async function correrPipeline(state, nuevos) {
     const club = (c.marca === 'Planet Fitness' ? clubPorUrl(c.url) : '') || matchClub(c.club_texto || '', c.marca);
     const reg = club ? CLUBES[club][0] : '';
     const fin = c.periodo_fin || c.fecha;
-    const id = c.url && ['SentiOne semanal', 'Google Reviews'].includes(c.fuente) ? await rid(c.url, c.marca) : await rid(c.fuente, fin, c.marca, norm(c.texto || '').slice(0, 120));
+    const id = c.url && ['SentiOne semanal', 'Google Reviews', 'SentiOne alerta'].includes(c.fuente) ? await rid(c.url, c.marca) : await rid(c.fuente, fin, c.marca, norm(c.texto || '').slice(0, 120));
     nuevosCom.push({
       id, fecha: c.fecha || fin, periodo_fin: fin, semana: semanaDe(fin), mes: fin.slice(0, 7),
       fuente: c.fuente ?? null, marca: c.marca ?? null,

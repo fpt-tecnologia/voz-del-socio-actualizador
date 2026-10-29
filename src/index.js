@@ -1,7 +1,7 @@
 // Actualizador del dashboard "Voz del Socio" — corre en GitHub Actions (sin Claude).
 // Horarios: L–V 10:41 y 15:41 (CDMX) y el botón "Actualizar ahora" del dashboard.
 import { correrPipeline, mergeFootprint, SECCIONES, norm } from './pipeline.js';
-import { buscarCorreos, adjuntos, cuerpoTexto, buscarArchivos, descargar } from './graph.js';
+import { buscarCorreos, adjuntos, cuerpoTexto, buscarArchivos, descargar, correosDesde, cuerpoConLigas } from './graph.js';
 import { aTexto, esImagen, b64, pptxTexto } from './texto.js';
 import { extraerReporte, clasificarMenciones } from './ia.js';
 import { descargarMenciones, aComentarios } from './sentione.js';
@@ -46,6 +46,25 @@ export async function correr(env, origen) {
         if (fallas.length) errores.push('SentiOne: ' + fallas.join('; '));
       }
     } catch (e) { errores.push('SentiOne: ' + e.message); }
+
+    // 1b) Alertas de SentiOne por correo (no gastan créditos de la API): buzón compartido ALERTAS_MAILBOX
+    if (env.ALERTAS_MAILBOX) try {
+      const wmA = await leer(env, 'meta/alertas.json', {});
+      const ms = (await correosDesde(env, env.ALERTAS_MAILBOX, wmA.ultimo || null)).filter((m) => !hechos.has(m.id));
+      let ultimo = wmA.ultimo || null, n = 0;
+      for (const m of ms) {
+        const de = (m.from?.emailAddress?.address || '').toLowerCase();
+        if (!/sentione/.test(de) && !/sentione/i.test(m.subject || '')) { ultimo = m.receivedDateTime; continue; }
+        await paso('Alerta de SentiOne: ' + (m.subject || '').slice(0, 80));
+        const d = await extraerReporte(env, { texto: `ASUNTO: ${m.subject}\nRECIBIDO: ${m.receivedDateTime}\n\n${cuerpoConLigas(m)}`, contexto: { fuente: 'SentiOne alerta', fuente_doc: 'Alerta SentiOne · ' + (m.subject || ''), recibido: m.receivedDateTime,
+          descripcion: 'Correo de alerta de SentiOne con menciones (normalmente negativas) en redes. Cada mención es UNA fila de "comentarios": fecha de la mención, texto (sin nombres de autores), canal (Facebook, Instagram, X, TikTok, Reddit, Google…), marca (Planet Fitness salvo que diga otra), club_texto si menciona sucursal, url = liga pública de la publicación (si solo viene la liga de sentione.com úsala). No generes otras secciones salvo insights si el correo trae un resumen.' } });
+        for (const r of d.comentarios || []) { r.fuente = 'SentiOne alerta'; r.fecha = r.fecha || m.receivedDateTime.slice(0, 10); r.periodo_fin = r.periodo_fin || r.fecha; if (!r.fuente_doc) r.fuente_doc = 'Alerta SentiOne · ' + (m.subject || ''); }
+        nuevos.push({ comentarios: d.comentarios || [], insights: (d.insights || []).map((r) => ({ ...r, fuente: 'SentiOne alerta' })) }); n += (d.comentarios || []).length;
+        hechos.add(m.id); ultimo = m.receivedDateTime;
+      }
+      if (ultimo && ultimo !== wmA.ultimo) await escribir(env, 'meta/alertas.json', { ultimo, en: ahora() });
+      if (n) fuentes.push(`Alertas SentiOne: ${n} menciones`);
+    } catch (e) { errores.push('Alertas SentiOne: ' + e.message); }
 
     // Lee un correo completo (cuerpo + adjuntos) y extrae; descarta lo que ya estaba cargado
     const correo = async (m, fuente, wm, campoPeriodo) => {
