@@ -28,6 +28,7 @@ jobs:
           MAILBOX: ${{ vars.MAILBOX }}
           AXOL_FROM: ${{ vars.AXOL_FROM }}
           REDES_FROM: ${{ vars.REDES_FROM }}
+          ALERTAS_MAILBOX: ${{ vars.ALERTAS_MAILBOX }}
           SP_HOST: ${{ vars.SP_HOST }}
           SP_SITE: ${{ vars.SP_SITE }}
           AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
