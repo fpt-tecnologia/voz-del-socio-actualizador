@@ -49,21 +49,23 @@ export async function correr(env, origen) {
     const iniSL = new Date(Date.parse(lunesSL + 'T12:00:00Z') - 7 * 864e5).toISOString().slice(0, 10);
     if (sem.sentione !== lunesSL && env.SENTIONE_KEY) try {
       const parcial = await leer(env, 'meta/sentione_parcial.json', {});
-      await paso(parcial.semana === lunesSL ? 'Reanudando la descarga semanal de SentiOne' : 'Social listening semanal desde SentiOne');
-      const res = await descargarMenciones(env.SENTIONE_KEY, SEMANAL, parcial.semana === lunesSL ? parcial.estado : null);
+      const yaBajado = parcial.semana === lunesSL && parcial.listo; // descarga completa guardada: no se vuelve a gastar en la API
+      await paso(yaBajado ? 'Usando la descarga de SentiOne ya guardada' : parcial.semana === lunesSL ? 'Reanudando la descarga semanal de SentiOne' : 'Social listening semanal desde SentiOne');
+      const res = yaBajado ? { terminado: true, menciones: parcial.menciones, consultas: parcial.consultas } : await descargarMenciones(env.SENTIONE_KEY, SEMANAL, parcial.semana === lunesSL ? parcial.estado : null);
       const { menciones, consultas } = res;
-      await escribir(env, 'meta/sentione.json', { en: ahora(), consultas, terminado: res.terminado });
+      if (!yaBajado) await escribir(env, 'meta/sentione.json', { en: ahora(), consultas, terminado: res.terminado });
       if (!res.terminado) {
         await escribir(env, 'meta/sentione_parcial.json', { semana: lunesSL, estado: res.estado, en: ahora(), reset: res.reset });
         const hr = res.reset ? new Date(Number(res.reset) * 1000 - 6 * 3600e3).toISOString().slice(11, 16) : null;
         fuentes.push(`SentiOne: ${menciones.length} menciones descargadas; se pausó por el límite de llamadas${hr ? ' (se libera a las ' + hr + ' CDMX)' : ''} y se termina en la siguiente corrida`);
       } else if (menciones.length) {
-        await escribir(env, 'meta/sentione_parcial.json', {});
+        if (!yaBajado) await escribir(env, 'meta/sentione_parcial.json', { semana: lunesSL, listo: true, menciones, consultas, en: ahora() });
         await paso(`Clasificando ${menciones.length} menciones de SentiOne`);
         const clasif = await clasificarMenciones(env, menciones.filter((m) => !m.es_cuenta_oficial));
         const d = resumenSemanal(menciones, clasif, consultas, iniSL, lunesSL);
         nuevos.push(d); sem.sentione = lunesSL; if (!sem.sl_semanas.includes(lunesSL)) sem.sl_semanas.push(lunesSL);
         fuentes.push(`SentiOne semanal: ${menciones.length} menciones (${d.comentarios.length} comentarios)`);
+        await escribir(env, 'meta/sentione_parcial.json', {});
       }
       const fallas = consultas.filter((c) => c.error).map((c) => `${c.consulta}: ${c.error}`);
       if (fallas.length) errores.push('SentiOne: ' + fallas.join('; '));

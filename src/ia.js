@@ -56,7 +56,7 @@ Para cada mención devuelve {"id", "incluir": true|false, "tema", "club_texto"}.
 - incluir=false si no es de México (con evidencia razonable: idioma, modismos o ubicaciones de otro país), si no habla de la marca (p. ej. #fitsinspo u otro "Smart Fit" que no es el gimnasio) o si es spam.
 - tema: uno de ${JSON.stringify(TEMAS)}.
 - club_texto: la sucursal mencionada tal como aparece (para reseñas de Google, el nombre del lugar de la url /maps/place/<nombre>/), o "".
-Responde {"items":[...]}.` }, { role: 'user', content: JSON.stringify(lote) }], 8000);
+Responde en formato JSON: {"items":[...]}.` }, { role: 'user', content: JSON.stringify(lote) }], 8000);
     for (const it of j.items || []) out.set(String(it.id), it);
   }
   return out;
