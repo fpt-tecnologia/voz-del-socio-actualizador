@@ -76,7 +76,7 @@ export async function npsSemanal(env, finISO) {
   const ranking = el.map((c, i) => ({ periodo_inicio, periodo_fin, club_texto: c.club, nps: c.nps, n: c.n, promotores: c.prom, pasivos: c.pas, detractores: c.det, rank: i + 1, rank_previo: rankPrev.get(c.club) ?? null, total_clubes: el.length, fuente_doc }));
   const nps_clubes = [...ranking.slice(0, 5).map((r) => ({ ...r, grupo: 'top' })), ...(el.length >= 5 ? ranking.slice(-5).map((r) => ({ ...r, grupo: 'bottom' })) : [])]
     .map(({ periodo_fin: pf, club_texto, nps, n, rank, rank_previo, grupo }) => ({ periodo_fin: pf, club_texto, nps, n, rank, rank_previo, grupo, fuente_doc }));
-  const nps_semanal = [{ periodo_inicio, periodo_fin, nps: N ? Math.round((P / N - D / N) * 100) : null, respuestas: N, clubes_con_muestra: el.length, hallazgos_riesgo: hall.length, fuente_doc }];
+  const nps_semanal = [{ periodo_inicio, periodo_fin, nps: N ? Math.round((P / N - D / N) * 100) : null, respuestas: N, promotores: P, pasivos: N - P - D, detractores: D, clubes_con_muestra: el.length, hallazgos_riesgo: hall.length, fuente_doc }];
   const comentarios = hall.map((h) => ({ fecha: h.fecha || periodo_fin, periodo_inicio, periodo_fin, fuente: 'NPS Qualtrics', marca: 'Planet Fitness', club_texto: h.club, tema: TEMA_DE[h.categoria] || 'Otro',
     sentimiento: 'negativo', texto: h.texto.slice(0, 280), canal: 'Encuesta', calificacion_nps: h.calificacion == null ? null : Number(h.calificacion), categoria_riesgo_fuente: h.categoria, url: null, fuente_doc }));
   return { nps_semanal, nps_clubes, comentarios, ranking, resumen: { periodo_inicio, periodo_fin, nps: nps_semanal[0].nps, respuestas: N, clubes: el.length, hallazgos: hall.length } };
