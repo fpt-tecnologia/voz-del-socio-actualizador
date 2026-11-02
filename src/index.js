@@ -6,6 +6,7 @@ import { aTexto, esImagen, b64, pptxTexto } from './texto.js';
 import { extraerReporte, clasificarMenciones } from './ia.js';
 import { descargarMenciones, aComentarios, SEMANAL, resumenSemanal } from './sentione.js';
 import { npsSemanal } from './qualtrics.js';
+import { generarComparativo } from './comparativo.js';
 import { generarRecomendaciones } from './recomendaciones.js';
 
 const DATASETS = ['comentarios', 'nps_semanal', 'nps_clubes', 'nps_mensual', 'sl_semanal', 'sl_canales', 'axol_semanal', 'mensual', 'insights', 'clubes', 'footprint_regiones', 'footprint_clubes', 'footprint_resumen', 'nps_ranking'];
@@ -232,6 +233,20 @@ export async function correr(env, origen) {
         if (rec) { await escribir(env, 'data/recomendaciones.json', [rec]); resumen.recomendaciones = rec.items.length; }
       }
     } catch (e) { errores.push('Recomendaciones: ' + e.message); }
+
+    // 9) Comparativo ejecutivo NPS + Social Listening: cuando ya entró el NPS de la semana (espera a SentiOne hasta el martes)
+    try {
+      if (sem.nps === lunes && sem.comparativo !== lunes && (sem.sentione === lunes || dias >= 1)) {
+        await paso('Comparativo NPS + Social Listening');
+        const st3 = {}; for (const d of DATASETS) st3[d] = (await leer(env, `data/${d}.json`, [])) || [];
+        const comp = await generarComparativo(env, st3, lunes);
+        if (comp) {
+          const prevC = (await leer(env, 'data/comparativo.json', [])) || [];
+          await escribir(env, 'data/comparativo.json', [...prevC.filter((c) => c.semana_fin !== lunes), comp].sort((x, y) => (x.semana_fin < y.semana_fin ? -1 : 1)));
+          sem.comparativo = lunes; await escribir(env, 'meta/semanal.json', sem); resumen.comparativo = lunes;
+        }
+      }
+    } catch (e) { errores.push('Comparativo: ' + e.message); }
 
     Object.assign(est, { estado: errores.length ? 'ok_con_errores' : 'ok', fin: ahora(), resumen, errores });
     await escribir(env, 'meta/estado.json', est);
