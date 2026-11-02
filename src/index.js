@@ -4,7 +4,7 @@ import { correrPipeline, mergeFootprint, SECCIONES, norm, conRegion, semanaDe } 
 import { buscarCorreos, adjuntos, cuerpoTexto, buscarArchivos, descargar, correosDesde, cuerpoConLigas } from './graph.js';
 import { aTexto, esImagen, b64, pptxTexto } from './texto.js';
 import { extraerReporte, clasificarMenciones } from './ia.js';
-import { descargarMenciones, aComentarios, SEMANAL, resumenSemanal } from './sentione.js';
+import { descargarMenciones, aComentarios, SEMANAL, resumenSemanal, palabrasSemana } from './sentione.js';
 import { npsSemanal } from './qualtrics.js';
 import { generarComparativo } from './comparativo.js';
 import { generarRecomendaciones } from './recomendaciones.js';
@@ -63,6 +63,9 @@ export async function correr(env, origen) {
         await paso(`Clasificando ${menciones.length} menciones de SentiOne`);
         const clasif = await clasificarMenciones(env, menciones.filter((m) => !m.es_cuenta_oficial));
         const d = resumenSemanal(menciones, clasif, consultas, iniSL, lunesSL);
+        try { const pal = palabrasSemana(menciones, clasif, lunesSL); const prevP = (await leer(env, 'data/sl_palabras.json', [])) || [];
+          const fins = [...new Set([...prevP.map((r) => r.periodo_fin), lunesSL])].sort().slice(-26);
+          await escribir(env, 'data/sl_palabras.json', [...prevP.filter((r) => r.periodo_fin !== lunesSL && fins.includes(r.periodo_fin)), ...pal]); } catch (e) { errores.push('Nube de palabras: ' + e.message); }
         nuevos.push(d); sem.sentione = lunesSL; if (!sem.sl_semanas.includes(lunesSL)) sem.sl_semanas.push(lunesSL);
         fuentes.push(`SentiOne semanal: ${menciones.length} menciones (${d.comentarios.length} comentarios)`);
         await escribir(env, 'meta/sentione_parcial.json', {});

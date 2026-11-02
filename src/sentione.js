@@ -104,3 +104,28 @@ export function aComentarios(menciones, clasif) {
   }
   return out;
 }
+
+// Nube de palabras semanal (como el reporte de Axol): palabras más repetidas en menciones positivas y negativas de Planet Fitness.
+// Se cuenta una vez por mención; se quitan stopwords, marcas, ligas, @usuarios y números.
+const STOP = new Set(('a al algo algun alguna algunas alguno algunos ante antes aqui asi aun aunque bien cada casi como con contra cual cuales cuando de del desde donde dos el ella ellas ellos en entre era eran es esa esas ese eso esos esta estaba estado estan estar este esto estos estoy fue fueron ha habia han hasta hay he la las le les lo los mas me mi mis mucho muy nada ni no nos nosotros o otra otras otro otros para pero poco por porque que quien se sea ser si sido sin sobre solo son su sus tambien tan tanto te tengo tiene tienen todo todos tu tus un una unas uno unos usted ustedes va vez ya yo hace hacer hacen puede pueden cosa cosas dia dias hoy siempre nunca ahora luego despues mientras gracias favor hola buenas buenos tardes noches saludos ver voy vamos estan estoy esta estas eres soy fui pues bueno tal igual creo cual etc jaja jajaja jajajaja xd q k pq x d tmb tb ok osea vdd neta asi este esta enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre lunes martes miercoles jueves viernes sabado domingo semana mes ano anos pasado pasada resulta pidio dijo dijeron deja dejan sabe saber quiero quieren tener tenia tenian estaba estuve hice hizo fueron siendo cuenta parte persona personas gente alguien nadie todas toda tiempo veces sola solo mismo misma otra ademas entonces incluso hacia hago aqui alla ahi donde algo sigue seguir ciudad').split(' '));
+const GROSERIA = /^(mamen|mames|cabron|cabrones|cabrona|pinche|pinches|verga|vergas|chingada|chingado|chingar|chinguen|mierda|puta|putas|puto|putos|pendejo|pendejos|pendeja|pendejas|culero|culeros|wey|guey|carajo|joder|madres|ojete|ojetes|mamadas|jodidos)$/;
+const MARCA_W = /^(planet|fitness|planetfitness|planetfitnessmx|pf|smart|smartfit|fitsi|gym|gimnasio|gimnasios|club|clubs|clubes|mexico|mx)$/;
+const sinAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export function palabrasSemana(menciones, clasif, periodo_fin, marca = 'Planet Fitness', top = 60, minN = 2) {
+  const out = [];
+  for (const [sent, et] of [['Positive', 'positivo'], ['Negative', 'negativo']]) {
+    const ms = menciones.filter((m) => m.marca === marca && !m.es_cuenta_oficial && m.sentimiento === sent && (clasif.get(String(m.id))?.incluir !== false));
+    const cnt = new Map(), formas = new Map(); // se cuenta sin acentos y se muestra la forma más usada (con acentos)
+    for (const m of ms) {
+      const t = String(m.texto || '').toLowerCase().replace(/https?:\/\/\S+|[@#][\wáéíóúñ]+/g, ' ');
+      const vistos = new Set();
+      for (const f of t.split(/[^a-záéíóúüñ]+/)) {
+        const w = sinAcento(f).replace(/ü/g, 'u'); if (w.length < 4 || STOP.has(w) || MARCA_W.test(w) || GROSERIA.test(w) || vistos.has(w)) continue;
+        vistos.add(w); cnt.set(w, (cnt.get(w) || 0) + 1); const fm = formas.get(w) || new Map(); fm.set(f, (fm.get(f) || 0) + 1); formas.set(w, fm);
+      }
+    }
+    const forma = (w) => [...formas.get(w)].sort((a, b) => b[1] - a[1] || (b[0] !== sinAcento(b[0])) - (a[0] !== sinAcento(a[0])))[0][0];
+    [...cnt].filter(([, n]) => n >= minN).sort((a, b) => b[1] - a[1]).slice(0, top).forEach(([w, n]) => out.push({ periodo_fin, marca, sentimiento: et, palabra: forma(w), n, menciones: ms.length }));
+  }
+  return out;
+}
