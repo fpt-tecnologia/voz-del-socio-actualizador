@@ -1,13 +1,14 @@
 // Actualizador del dashboard "Voz del Socio" — corre en GitHub Actions (sin Claude).
 // Horarios: L–V 10:41 y 15:41 (CDMX) y el botón "Actualizar ahora" del dashboard.
-import { correrPipeline, mergeFootprint, SECCIONES, norm } from './pipeline.js';
+import { correrPipeline, mergeFootprint, SECCIONES, norm, conRegion, semanaDe } from './pipeline.js';
 import { buscarCorreos, adjuntos, cuerpoTexto, buscarArchivos, descargar, correosDesde, cuerpoConLigas } from './graph.js';
 import { aTexto, esImagen, b64, pptxTexto } from './texto.js';
 import { extraerReporte, clasificarMenciones } from './ia.js';
-import { descargarMenciones, aComentarios } from './sentione.js';
+import { descargarMenciones, aComentarios, SEMANAL, resumenSemanal } from './sentione.js';
+import { npsSemanal } from './qualtrics.js';
 import { generarRecomendaciones } from './recomendaciones.js';
 
-const DATASETS = ['comentarios', 'nps_semanal', 'nps_clubes', 'nps_mensual', 'sl_semanal', 'sl_canales', 'axol_semanal', 'mensual', 'insights', 'clubes', 'footprint_regiones', 'footprint_clubes', 'footprint_resumen'];
+const DATASETS = ['comentarios', 'nps_semanal', 'nps_clubes', 'nps_mensual', 'sl_semanal', 'sl_canales', 'axol_semanal', 'mensual', 'insights', 'clubes', 'footprint_regiones', 'footprint_clubes', 'footprint_resumen', 'nps_ranking'];
 const MESES = { ENERO: '01', FEBRERO: '02', MARZO: '03', ABRIL: '04', MAYO: '05', JUNIO: '06', JULIO: '07', AGOSTO: '08', SEPTIEMBRE: '09', OCTUBRE: '10', NOVIEMBRE: '11', DICIEMBRE: '12' };
 const ahora = () => new Date().toISOString();
 const maxDe = (rows, k) => rows.reduce((m, r) => (r[k] && r[k] > m ? r[k] : m), '');
@@ -28,24 +29,35 @@ export async function correr(env, origen) {
     const proc = await leer(env, 'meta/procesados.json', { ids: [] }); const hechos = new Set(proc.ids);
     const wmNps = maxDe(state.nps_semanal, 'periodo_fin'), wmAxol = maxDe(state.axol_semanal, 'periodo_fin'), wmMes = maxDe(state.mensual, 'mes'), wmFp = maxDe(state.footprint_regiones, 'trimestre');
 
-    // 1) SentiOne: una extracción por semana (créditos de API limitados). Corre en la primera corrida a partir de 6.5 días de la anterior.
-    try {
-      const ult = await leer(env, 'meta/sentione.json', {});
-      if (!ult.en || Date.now() - Date.parse(ult.en) > 6.5 * 864e5) {
-        await paso('Descargando menciones de SentiOne');
-        const { menciones, consultas } = await descargarMenciones(env.SENTIONE_KEY);
-        await escribir(env, 'meta/sentione.json', { en: ahora(), consultas });
-        const urls = new Set(state.comentarios.filter((r) => r.url).map((r) => r.marca + '|' + r.url));
-        const nuevas = menciones.filter((m) => m.url && !urls.has(m.marca + '|' + m.url));
-        if (nuevas.length) {
-          await paso(`Clasificando ${nuevas.length} menciones nuevas`);
-          const filas = aComentarios(nuevas, await clasificarMenciones(env, nuevas));
-          if (filas.length) { nuevos.push({ comentarios: filas }); fuentes.push(`SentiOne API: ${filas.length} comentarios`); }
-        }
-        const fallas = consultas.filter((c) => c.error).map((c) => `${c.consulta}: ${c.error}`);
-        if (fallas.length) errores.push('SentiOne: ' + fallas.join('; '));
+    // 1) Semanal (lunes 08:00 CDMX): NPS por club desde Qualtrics y Social Listening desde SentiOne.
+    //    Si la corrida del lunes falla, cualquier corrida posterior de la semana lo reintenta con la misma ventana.
+    const cdmx = new Date(Date.now() - 6 * 3600e3); const dias = (cdmx.getUTCDay() + 6) % 7;
+    const lunes = new Date(cdmx - (dias === 0 && cdmx.getUTCHours() < 8 ? 7 : dias) * 864e5).toISOString().slice(0, 10);
+    const finSem = lunes + 'T14:00:00Z', iniSem = new Date(Date.parse(finSem) - 7 * 864e5).toISOString().slice(0, 10);
+    const sem = await leer(env, 'meta/semanal.json', {}); sem.nps_semanas = sem.nps_semanas || []; sem.sl_semanas = sem.sl_semanas || [];
+    let rankingNuevo = null;
+    if (sem.nps !== lunes && env.QUALTRICS_API_TOKEN) try {
+      await paso('NPS semanal desde Qualtrics');
+      const r = await npsSemanal(env, finSem);
+      nuevos.push({ nps_semanal: r.nps_semanal, nps_clubes: r.nps_clubes, comentarios: r.comentarios }); rankingNuevo = r.ranking;
+      sem.nps = lunes; if (!sem.nps_semanas.includes(r.resumen.periodo_fin)) sem.nps_semanas.push(r.resumen.periodo_fin);
+      fuentes.push(`Qualtrics: NPS ${r.resumen.nps} · ${r.resumen.respuestas} respuestas · ${r.resumen.clubes} clubes · ${r.resumen.hallazgos} hallazgos de riesgo`);
+    } catch (e) { errores.push('Qualtrics: ' + e.message); }
+    if (sem.sentione !== lunes && env.SENTIONE_KEY) try {
+      await paso('Social listening semanal desde SentiOne');
+      const { menciones, consultas } = await descargarMenciones(env.SENTIONE_KEY, SEMANAL);
+      await escribir(env, 'meta/sentione.json', { en: ahora(), consultas });
+      if (menciones.length) {
+        await paso(`Clasificando ${menciones.length} menciones de SentiOne`);
+        const clasif = await clasificarMenciones(env, menciones.filter((m) => !m.es_cuenta_oficial));
+        const d = resumenSemanal(menciones, clasif, consultas, iniSem, lunes);
+        nuevos.push(d); sem.sentione = lunes; if (!sem.sl_semanas.includes(lunes)) sem.sl_semanas.push(lunes);
+        fuentes.push(`SentiOne semanal: ${menciones.length} menciones (${d.comentarios.length} comentarios)`);
       }
+      const fallas = consultas.filter((c) => c.error).map((c) => `${c.consulta}: ${c.error}`);
+      if (fallas.length) errores.push('SentiOne: ' + fallas.join('; '));
     } catch (e) { errores.push('SentiOne: ' + e.message); }
+    await escribir(env, 'meta/semanal.json', sem);
 
     // 1b) Alertas de SentiOne por correo (no gastan créditos de la API): buzón compartido ALERTAS_MAILBOX
     if (env.ALERTAS_MAILBOX) try {
@@ -93,6 +105,11 @@ export async function correr(env, origen) {
       for (const m of ms) {
         await paso('Leyendo: ' + m.subject);
         const d = await correo(m, 'Reporte semanal NPS + Social Listening', wmNps, 'nps_semanal');
+        // Lo que ya llegó por API (Qualtrics / SentiOne) manda sobre lo que trae el correo de esa misma semana
+        const npsW = new Set(sem.nps_semanas), slW = new Set(sem.sl_semanas);
+        for (const s2 of ['nps_semanal', 'nps_clubes']) d[s2] = (d[s2] || []).filter((r) => !npsW.has(r.periodo_fin));
+        for (const s2 of ['sl_semanal', 'sl_canales']) d[s2] = (d[s2] || []).filter((r) => !slW.has(r.periodo_fin));
+        d.comentarios = (d.comentarios || []).filter((r) => !(r.fuente === 'NPS Qualtrics' && npsW.has(r.periodo_fin || r.fecha)));
         if (!d._yaCargado) { nuevos.push(d); fuentes.push(m.subject); }
         hechos.add(m.id);
       }
@@ -192,6 +209,9 @@ export async function correr(env, origen) {
       resumen.riesgo_socio = nuevosCom.filter((r) => r.categoria === 'Riesgo para el socio').length;
       resumen.riesgo_operacion = nuevosCom.filter((r) => r.categoria === 'Riesgo para la operación').length;
       for (const [k2, rows] of Object.entries(out)) if (JSON.stringify(rows) !== JSON.stringify(state[k2] || [])) await escribir(env, `data/${k2}.json`, rows);
+      if (rankingNuevo) { const key2 = (r) => r.periodo_fin + '|' + r.club_texto; const mp = new Map(state.nps_ranking.map((r) => [key2(r), r]));
+        for (const r of rankingNuevo) mp.set(key2(r), { ...conRegion(r), semana: semanaDe(r.periodo_fin) });
+        await escribir(env, 'data/nps_ranking.json', [...mp.values()].sort((x, y) => (x.periodo_fin < y.periodo_fin ? -1 : x.periodo_fin > y.periodo_fin ? 1 : x.rank - y.rank))); }
       for (const b of buzonHechos) {
         const cs = nuevosCom.filter((r) => r.fuente_doc === b.fi.nombre);
         const clubs = [...new Set(cs.map((r) => r.club).filter(Boolean))].slice(0, 4);

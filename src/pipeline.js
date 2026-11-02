@@ -64,6 +64,9 @@ function merge(oldRows, newRows, key) {
 const k = (...a) => JSON.stringify(a.map((x) => (x === undefined ? null : x)));
 const regReg = (reg) => (reg ? `${reg.replace('Región ', 'R')} · ${REGIONAL[reg]}` : '');
 
+// Club oficial y región a partir del nombre del club que trae una fuente
+export const conRegion = (r, field = 'club_texto') => { const club = matchClub(r[field] || '', 'Planet Fitness'); const reg = club ? CLUBES[club][0] : ''; return { ...r, club: club || r[field] || '', region: reg, regional: REGIONAL[reg] || '', region_regional: regReg(reg) }; };
+
 // state: { nombre: filas[] }, nuevos: [{ seccion: filas[] }, ...]  ->  { nombre: filas[] }
 export async function correrPipeline(state, nuevos) {
   const S = (n) => state[n] || [];
