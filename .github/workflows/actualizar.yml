@@ -2,10 +2,11 @@ name: Actualizar dashboard Voz del Socio
 on:
   schedule:
     - cron: '41 16,21 * * 1-5'   # 10:41 y 15:41 en CDMX, lunes a viernes
-    - cron: '0 12 * * 1'         # lunes 06:00 CDMX: arranca la descarga semanal de SentiOne
-    - cron: '5 13 * * 1'         # lunes 07:05 CDMX: termina SentiOne si se pausó por el límite de llamadas por hora
-    - cron: '0 14 * * 1'         # lunes 08:00 CDMX: NPS (Qualtrics) y, si aún falta, el resto de SentiOne
-    - cron: '5 15 * * 1'         # lunes 09:05 CDMX: respaldo para terminar SentiOne y el comparativo
+    - cron: '1 6 * * 1'          # lunes 00:01 CDMX: arranca la descarga semanal de SentiOne
+    - cron: '5 7 * * 1'          # lunes 01:05 CDMX: termina SentiOne si se pausó por el límite de llamadas por hora
+    - cron: '5 8 * * 1'          # lunes 02:05 CDMX: respaldo para terminar SentiOne
+    - cron: '0 10 * * 1'         # lunes 04:00 CDMX: NPS de Qualtrics (semana que cierra a las 04:00) y comparativo
+    - cron: '5 11 * * 1'         # lunes 05:05 CDMX: respaldo por si GitHub se retrasa
   workflow_dispatch: {}          # botón "Actualizar ahora" del dashboard y ejecución manual
 concurrency:
   group: actualizar
