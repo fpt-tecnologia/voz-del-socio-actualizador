@@ -44,15 +44,25 @@ export async function correr(env, origen) {
       sem.nps = lunes; if (!sem.nps_semanas.includes(r.resumen.periodo_fin)) sem.nps_semanas.push(r.resumen.periodo_fin);
       fuentes.push(`Qualtrics: NPS ${r.resumen.nps} · ${r.resumen.respuestas} respuestas · ${r.resumen.clubes} clubes · ${r.resumen.hallazgos} hallazgos de riesgo`);
     } catch (e) { errores.push('Qualtrics: ' + e.message); }
-    if (sem.sentione !== lunes && env.SENTIONE_KEY) try {
-      await paso('Social listening semanal desde SentiOne');
-      const { menciones, consultas } = await descargarMenciones(env.SENTIONE_KEY, SEMANAL);
-      await escribir(env, 'meta/sentione.json', { en: ahora(), consultas });
-      if (menciones.length) {
+    // SentiOne arranca el lunes a las 06:00 CDMX; si se acaba el cupo de llamadas guarda el avance y lo termina en la siguiente corrida
+    const lunesSL = new Date(cdmx - (dias === 0 && cdmx.getUTCHours() < 6 ? 7 : dias) * 864e5).toISOString().slice(0, 10);
+    const iniSL = new Date(Date.parse(lunesSL + 'T12:00:00Z') - 7 * 864e5).toISOString().slice(0, 10);
+    if (sem.sentione !== lunesSL && env.SENTIONE_KEY) try {
+      const parcial = await leer(env, 'meta/sentione_parcial.json', {});
+      await paso(parcial.semana === lunesSL ? 'Reanudando la descarga semanal de SentiOne' : 'Social listening semanal desde SentiOne');
+      const res = await descargarMenciones(env.SENTIONE_KEY, SEMANAL, parcial.semana === lunesSL ? parcial.estado : null);
+      const { menciones, consultas } = res;
+      await escribir(env, 'meta/sentione.json', { en: ahora(), consultas, terminado: res.terminado });
+      if (!res.terminado) {
+        await escribir(env, 'meta/sentione_parcial.json', { semana: lunesSL, estado: res.estado, en: ahora(), reset: res.reset });
+        const hr = res.reset ? new Date(Number(res.reset) * 1000 - 6 * 3600e3).toISOString().slice(11, 16) : null;
+        fuentes.push(`SentiOne: ${menciones.length} menciones descargadas; se pausó por el límite de llamadas${hr ? ' (se libera a las ' + hr + ' CDMX)' : ''} y se termina en la siguiente corrida`);
+      } else if (menciones.length) {
+        await escribir(env, 'meta/sentione_parcial.json', {});
         await paso(`Clasificando ${menciones.length} menciones de SentiOne`);
         const clasif = await clasificarMenciones(env, menciones.filter((m) => !m.es_cuenta_oficial));
-        const d = resumenSemanal(menciones, clasif, consultas, iniSem, lunes);
-        nuevos.push(d); sem.sentione = lunes; if (!sem.sl_semanas.includes(lunes)) sem.sl_semanas.push(lunes);
+        const d = resumenSemanal(menciones, clasif, consultas, iniSL, lunesSL);
+        nuevos.push(d); sem.sentione = lunesSL; if (!sem.sl_semanas.includes(lunesSL)) sem.sl_semanas.push(lunesSL);
         fuentes.push(`SentiOne semanal: ${menciones.length} menciones (${d.comentarios.length} comentarios)`);
       }
       const fallas = consultas.filter((c) => c.error).map((c) => `${c.consulta}: ${c.error}`);

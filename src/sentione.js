@@ -21,25 +21,30 @@ function slim(m, marca, fuente, pid) {
     calificacion_resena: c.review?.rating?.value ?? null, engagement_rate: em.engagementRate, interacciones: inter, es_cuenta_oficial: !!(autor && canalOf && autor === canalOf) };
 }
 
-export async function descargarMenciones(key, lista = CONSULTAS) {
-  const vistos = new Set(), menciones = [], consultas = []; let restante = null;
-  for (const [pid, marca, fuente, filtros, orden, maxp] of lista) {
-    let cursor = null, n = 0, error = null, completo = false;
-    for (let p = 0; p < maxp; p++) {
-      if (restante !== null && Number(restante) <= 1) { error = 'límite de 30 llamadas/hora alcanzado'; break; }
+// Descarga reanudable: si SentiOne corta por el límite de llamadas, devuelve el avance para seguir en la siguiente corrida.
+export async function descargarMenciones(key, lista = CONSULTAS, prev = null) {
+  const st = prev || { i: 0, cursor: null, pag: 0, n: 0, menciones: [], consultas: [], vistos: [] };
+  const vistos = new Set(st.vistos); let restante = null, reset = null;
+  const pausa = (motivo) => ({ terminado: false, motivo, reset, estado: { ...st, vistos: [...vistos] }, menciones: st.menciones, consultas: st.consultas });
+  for (; st.i < lista.length; st.i++, st.cursor = null, st.pag = 0, st.n = 0) {
+    const [pid, marca, fuente, filtros, orden, maxp] = lista[st.i];
+    let error = null, completo = false;
+    while (st.pag < maxp) {
+      if (restante !== null && Number(restante) <= 0) return pausa('límite de llamadas por hora');
       let r;
       try {
-        r = await fetch(BASE.replace('{pid}', pid) + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ filters: filtros, sortType: orden }) });
+        r = await fetch(BASE.replace('{pid}', pid) + (st.cursor ? '?cursor=' + encodeURIComponent(st.cursor) : ''), { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ filters: filtros, sortType: orden }) });
       } catch (e) { error = String(e).slice(0, 120); break; }
-      restante = r.headers.get('x-rate-limit-remaining');
+      restante = r.headers.get('x-rate-limit-remaining'); reset = r.headers.get('x-rate-limit-reset') || reset;
+      if (r.status === 429) return pausa('límite de llamadas por hora');
       if (!r.ok) { error = 'HTTP ' + r.status; break; }
       const d = await r.json(); const data = d.data || [];
-      for (const m of data) if (!vistos.has(m.id) && m.type !== 'PrivateMessage') { vistos.add(m.id); menciones.push(slim(m, marca, fuente, pid)); n++; }
-      cursor = d.cursor; if (!cursor || !data.length) { completo = true; break; }
+      for (const m of data) if (!vistos.has(m.id) && m.type !== 'PrivateMessage') { vistos.add(m.id); st.menciones.push(slim(m, marca, fuente, pid)); st.n++; }
+      st.pag++; st.cursor = d.cursor; if (!st.cursor || !data.length) { completo = true; break; }
     }
-    consultas.push({ consulta: `${marca} · ${fuente} · ${filtros.content?.sentiment?.[0] || 'todas'}`, menciones: n, completo, error });
+    st.consultas.push({ consulta: `${marca} · ${fuente} · ${filtros.content?.sentiment?.[0] || 'todas'}`, menciones: st.n, completo, error });
   }
-  return { menciones, consultas, restante };
+  return { terminado: true, menciones: st.menciones, consultas: st.consultas, restante };
 }
 
 // Reporte semanal: muestra completa de la semana por marca (para volumen, sentimiento y canales) + reseñas de Google.
