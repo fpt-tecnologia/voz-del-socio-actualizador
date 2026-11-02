@@ -33,8 +33,9 @@ export async function correr(env, origen) {
     // 1) Semanal (lunes 08:00 CDMX): NPS por club desde Qualtrics y Social Listening desde SentiOne.
     //    Si la corrida del lunes falla, cualquier corrida posterior de la semana lo reintenta con la misma ventana.
     const cdmx = new Date(Date.now() - 6 * 3600e3); const dias = (cdmx.getUTCDay() + 6) % 7;
-    const lunes = new Date(cdmx - (dias === 0 && cdmx.getUTCHours() < 8 ? 7 : dias) * 864e5).toISOString().slice(0, 10);
-    const finSem = lunes + 'T14:00:00Z', iniSem = new Date(Date.parse(finSem) - 7 * 864e5).toISOString().slice(0, 10);
+    // NPS de Qualtrics: semana que cierra el lunes 04:00 CDMX (10:00 UTC)
+    const lunes = new Date(cdmx - (dias === 0 && cdmx.getUTCHours() < 4 ? 7 : dias) * 864e5).toISOString().slice(0, 10);
+    const finSem = lunes + 'T10:00:00Z', iniSem = new Date(Date.parse(finSem) - 7 * 864e5).toISOString().slice(0, 10);
     const sem = await leer(env, 'meta/semanal.json', {}); sem.nps_semanas = sem.nps_semanas || []; sem.sl_semanas = sem.sl_semanas || [];
     let rankingNuevo = null;
     if (sem.nps !== lunes && env.QUALTRICS_API_TOKEN) try {
@@ -44,8 +45,8 @@ export async function correr(env, origen) {
       sem.nps = lunes; if (!sem.nps_semanas.includes(r.resumen.periodo_fin)) sem.nps_semanas.push(r.resumen.periodo_fin);
       fuentes.push(`Qualtrics: NPS ${r.resumen.nps} · ${r.resumen.respuestas} respuestas · ${r.resumen.clubes} clubes · ${r.resumen.hallazgos} hallazgos de riesgo`);
     } catch (e) { errores.push('Qualtrics: ' + e.message); }
-    // SentiOne arranca el lunes a las 06:00 CDMX; si se acaba el cupo de llamadas guarda el avance y lo termina en la siguiente corrida
-    const lunesSL = new Date(cdmx - (dias === 0 && cdmx.getUTCHours() < 6 ? 7 : dias) * 864e5).toISOString().slice(0, 10);
+    // SentiOne arranca el lunes a las 00:01 CDMX; si se acaba el cupo de llamadas guarda el avance y lo termina en la siguiente corrida
+    const lunesSL = new Date(cdmx - dias * 864e5).toISOString().slice(0, 10);
     const iniSL = new Date(Date.parse(lunesSL + 'T12:00:00Z') - 7 * 864e5).toISOString().slice(0, 10);
     if (sem.sentione !== lunesSL && env.SENTIONE_KEY) try {
       const parcial = await leer(env, 'meta/sentione_parcial.json', {});
