@@ -8,7 +8,7 @@ import { descargarMenciones, aComentarios, SEMANAL, resumenSemanal, palabrasSema
 import { npsSemanal } from './qualtrics.js';
 import { generarComparativo } from './comparativo.js';
 import { generarRecomendaciones } from './recomendaciones.js';
-import { esquema as pbiEsquema } from './powerbi.js';
+import { kpisSharePoint } from './powerbi.js';
 
 const DATASETS = ['comentarios', 'nps_semanal', 'nps_clubes', 'nps_mensual', 'sl_semanal', 'sl_canales', 'axol_semanal', 'mensual', 'insights', 'clubes', 'footprint_regiones', 'footprint_clubes', 'footprint_resumen', 'nps_ranking'];
 const MESES = { ENERO: '01', FEBRERO: '02', MARZO: '03', ABRIL: '04', MAYO: '05', JUNIO: '06', JULIO: '07', AGOSTO: '08', SEPTIEMBRE: '09', OCTUBRE: '10', NOVIEMBRE: '11', DICIEMBRE: '12' };
@@ -77,10 +77,18 @@ export async function correr(env, origen) {
     } catch (e) { errores.push('SentiOne: ' + e.message); }
     await escribir(env, 'meta/semanal.json', sem);
 
-    // 1c) Power BI: estructura de los datasets de gerentes y ventas (una vez por semana o si no existe)
-    try { const pe = await leer(env, 'meta/powerbi_esquema.json', null);
-      if (!pe || Date.now() - Date.parse(pe.en) > 7 * 864e5) { await paso('Leyendo la estructura de Power BI'); await escribir(env, 'meta/powerbi_esquema.json', await pbiEsquema(env)); } }
-    catch (e) { errores.push('Power BI: ' + e.message); }
+    // 1c) KPIs operativos por club (tablero de gerentes en Power BI): archivo JSON que deja el flujo de Power Automate en SharePoint
+    try { await paso('KPIs de clubes (Power BI)');
+      const k = await kpisSharePoint(env);
+      if (k && k.filas.length) {
+        const fc = k.filas[0].fecha_corte; const prevK = (await leer(env, 'data/kpis_clubes.json', [])) || [];
+        const limite = new Date(Date.parse(fc + 'T12:00:00Z') - 120 * 864e5).toISOString().slice(0, 10);
+        const keep = prevK.filter((r) => r.fecha_corte !== fc && r.fecha_corte >= limite);
+        await escribir(env, 'data/kpis_clubes.json', [...keep, ...k.filas].sort((a, b) => (a.fecha_corte < b.fecha_corte ? -1 : a.fecha_corte > b.fecha_corte ? 1 : a.club.localeCompare(b.club))));
+        await escribir(env, 'meta/powerbi.json', { en: ahora(), archivo: k.archivo, modificado: k.modificado, fecha_corte: fc, clubes: k.filas.length, sin_mapear: k.sin_mapear });
+        fuentes.push(`Power BI (tablero de gerentes): KPIs de ${k.filas.length} clubes al ${fc}`);
+      } else await escribir(env, 'meta/powerbi.json', { en: ahora(), aviso: 'Aún no hay archivo del flujo de Power Automate en SharePoint' });
+    } catch (e) { if (/404|itemNotFound/i.test(e.message)) await escribir(env, 'meta/powerbi.json', { en: ahora(), aviso: 'No existe la carpeta Voz del Socio/PowerBI en SharePoint' }); else errores.push('KPIs Power BI: ' + e.message); }
 
     // 1b) Alertas de SentiOne por correo (no gastan créditos de la API): buzón compartido ALERTAS_MAILBOX
     if (env.ALERTAS_MAILBOX) try {
