@@ -8,6 +8,7 @@ import { descargarMenciones, aComentarios, SEMANAL, resumenSemanal, palabrasSema
 import { npsSemanal } from './qualtrics.js';
 import { generarComparativo } from './comparativo.js';
 import { generarRecomendaciones } from './recomendaciones.js';
+import { esquema as pbiEsquema } from './powerbi.js';
 
 const DATASETS = ['comentarios', 'nps_semanal', 'nps_clubes', 'nps_mensual', 'sl_semanal', 'sl_canales', 'axol_semanal', 'mensual', 'insights', 'clubes', 'footprint_regiones', 'footprint_clubes', 'footprint_resumen', 'nps_ranking'];
 const MESES = { ENERO: '01', FEBRERO: '02', MARZO: '03', ABRIL: '04', MAYO: '05', JUNIO: '06', JULIO: '07', AGOSTO: '08', SEPTIEMBRE: '09', OCTUBRE: '10', NOVIEMBRE: '11', DICIEMBRE: '12' };
@@ -75,6 +76,11 @@ export async function correr(env, origen) {
       if (fallas.length) errores.push('SentiOne: ' + fallas.join('; '));
     } catch (e) { errores.push('SentiOne: ' + e.message); }
     await escribir(env, 'meta/semanal.json', sem);
+
+    // 1c) Power BI: estructura de los datasets de gerentes y ventas (una vez por semana o si no existe)
+    try { const pe = await leer(env, 'meta/powerbi_esquema.json', null);
+      if (!pe || Date.now() - Date.parse(pe.en) > 7 * 864e5) { await paso('Leyendo la estructura de Power BI'); await escribir(env, 'meta/powerbi_esquema.json', await pbiEsquema(env)); } }
+    catch (e) { errores.push('Power BI: ' + e.message); }
 
     // 1b) Alertas de SentiOne por correo (no gastan créditos de la API): buzón compartido ALERTAS_MAILBOX
     if (env.ALERTAS_MAILBOX) try {
