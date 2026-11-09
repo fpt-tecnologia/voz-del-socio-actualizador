@@ -81,7 +81,7 @@ export async function correr(env, origen) {
     try { await paso('KPIs de clubes (Power BI)');
       const k = await kpisSharePoint(env);
       if (k && k.filas.length) {
-        // El flujo trae el cierre de cada mes y cada domingo de 2026 más el corte más reciente. Se guardan cierres de mes, domingos y los cortes de los últimos 14 días.
+        // El flujo trae el cierre de cada mes desde sep 2024 más el corte más reciente. Se guardan cierres de mes, domingos y los cortes de los últimos 14 días.
         const fc = k.filas.reduce((m, r) => (r.fecha_corte > m ? r.fecha_corte : m), ''); const prevK = (await leer(env, 'data/kpis_clubes.json', [])) || [];
         const nuevos = new Set(k.filas.map((r) => r.fecha_corte + '|' + r.club));
         const todas = [...prevK.filter((r) => !nuevos.has(r.fecha_corte + '|' + r.club)), ...k.filas];

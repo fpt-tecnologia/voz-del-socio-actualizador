@@ -80,7 +80,11 @@ export function parseKpis(rows) {
       ventas_mtd: r.ventas_mtd, ventas_meta_mes: r4(r.ventas_meta_mes), ventas_avance: r4(vAv), ventas_vs_ritmo: vAv != null && ritmo ? r4(vAv / ritmo) : null,
       black_mtd: r.black_mtd, black_pct: r.ventas_mtd ? r4(r.black_mtd / r.ventas_mtd) : null, black_meta: r4(r.black_meta),
       cancel_vol_mtd: r.cancel_vol_mtd, cancel_vol_meta_mes: r4(r.cancel_vol_meta_mes), cancel_uso_meta: r4(cUso), cancel_vs_ritmo: cUso != null && ritmo ? r4(cUso / ritmo) : null, cancel_vol_pct: r4(r.cancel_vol_pct),
-      rot_vol_12m: r4(r.rot_vol_12m), rot_vol_meta: r4(r.rot_vol_meta), rot_1m: r4(r.rot_1m), desempeno: r.desempeno == null || r.desempeno < 1 ? null : Math.round(r.desempeno * 10) / 10 };
+      rot_vol_12m: r4(r.rot_vol_12m), rot_vol_meta: r4(r.rot_vol_meta), rot_1m: r4(r.rot_1m), desempeno: r.desempeno == null || r.desempeno < 1 ? null : Math.round(r.desempeno * 10) / 10,
+      // Indicadores del Estatus Histórico del tablero (cierre de mes)
+      black_pct_tablero: r4(r.black_pct_tablero), black_meta_tablero: r4(r.black_meta_tablero), conversion: r4(r.conversion),
+      cancel_aut_mtd: r.cancel_aut_mtd ?? null, cancel_aut_meta_mes: r4(r.cancel_aut_meta_mes), cancel_aut_pct: r4(r.cancel_aut_pct),
+      nps_mes: r.nps_mes == null ? null : Math.round(r.nps_mes * 10) / 10, nps_3m: r.nps_3m == null ? null : Math.round(r.nps_3m * 10) / 10, nps_meta: r.nps_meta == null ? null : Math.round(r.nps_meta * 10) / 10 };
   });
   return { filas: out, sin_mapear: [...new Set(sinMapear)] };
 }
