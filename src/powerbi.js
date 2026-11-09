@@ -95,8 +95,9 @@ export function armaExtra(F) {
 }
 export function armaVentas(F) {
   const semM = new Map(); for (const r of F.filter((x) => x.t.startsWith('sem_'))) { const key = r.f + '|' + r.c; if (!semM.has(key)) semM.set(key, { semana: r.f, club: r.c, total: 0, black: 0, web: 0, rewrite: 0 }); semM.get(key)[r.t.slice(4)] = r.v || 0; }
-  const repM = new Map(); for (const r of F.filter((x) => x.t.startsWith('rep_'))) { const [rep, cat] = String(r.k).split('|'); const key = r.f + '|' + r.c + '|' + r.k; if (!repM.has(key)) repM.set(key, { semana: r.f, club: r.c, rep, cat, total: 0, black: 0 }); repM.get(key)[r.t === 'rep_total' ? 'total' : 'black'] = r.v || 0; }
-  return { sem: [...semM.values()], reps: [...repM.values()], turno: F.filter((x) => x.t === 'mes_turno').map((r) => ({ fecha: r.f, club: r.c, turno: r.k, n: r.v })),
+  // Equipo de ventas por puesto (sin nombres): personas con ventas, ventas y Black por semana, club y puesto
+  const catM = new Map(); for (const r of F.filter((x) => x.t.startsWith('rep_'))) { const cat = String(r.k).split('|').pop(); const key = r.f + '|' + r.c + '|' + cat; if (!catM.has(key)) catM.set(key, { semana: r.f, club: r.c, cat, n: 0, total: 0, black: 0 }); const o = catM.get(key); o[r.t === 'rep_total' ? 'total' : r.t === 'rep_black' ? 'black' : 'n'] += r.v || 0; }
+  return { sem: [...semM.values()], equipo: [...catM.values()], turno: F.filter((x) => x.t === 'mes_turno').map((r) => ({ fecha: r.f, club: r.c, turno: r.k, n: r.v })),
     fuente: F.filter((x) => x.t === 'mes_fuente').map((r) => ({ fecha: r.f, club: r.c, fuente: r.k, n: r.v })), metas: F.filter((x) => x.t === 'meta_mes').map((r) => ({ fecha: r.f, club: r.c, meta: r.v })) };
 }
 export function parseKpis(rows) {
@@ -119,4 +120,31 @@ export function parseKpis(rows) {
       nps_mes: r.nps_mes == null ? null : Math.round(r.nps_mes * 10) / 10, nps_3m: r.nps_3m == null ? null : Math.round(r.nps_3m * 10) / 10, nps_meta: r.nps_meta == null ? null : Math.round(r.nps_meta * 10) / 10 };
   });
   return { filas: out, sin_mapear: [...new Set(sinMapear)] };
+}
+
+// Contador_Socios: movimientos diarios agrupados por semana y perfil actual de los socios activos
+export function armaSocios(F) {
+  const m = new Map(); const map = { sem_ventas: 'ventas', sem_rewrites: 'rewrites', sem_cancel_vol: 'cancel_vol', sem_cancel_aut: 'cancel_aut', sem_socios: 'socios' };
+  for (const r of F.filter((x) => map[x.t])) { const key = r.f + '|' + r.c; if (!m.has(key)) m.set(key, { semana: r.f, club: r.c, ventas: 0, rewrites: 0, cancel_vol: 0, cancel_aut: 0, socios: null }); m.get(key)[map[r.t]] = r.v; }
+  const perfil = F.filter((x) => x.t === 'perfil').map((r) => { const [tipo, edad, genero] = String(r.k).split('|'); return { club: r.c, tipo, edad, genero, n: r.v }; });
+  return { fecha: F.find((x) => x.t === 'perfil')?.f || null, sem: [...m.values()], perfil };
+}
+// PBI_Product Sales: venta de producto por mes, club y categoría; visitas por socio por semana
+export function armaProducto(F) {
+  const m = new Map(); for (const r of F.filter((x) => x.t.startsWith('prod_'))) { const key = r.f + '|' + r.c + '|' + r.k; if (!m.has(key)) m.set(key, { fecha: r.f, club: r.c, categoria: r.k, unidades: 0, monto: 0 }); m.get(key)[r.t === 'prod_unidades' ? 'unidades' : 'monto'] = red(r.v, 0); }
+  return { ventas: [...m.values()], visitas: F.filter((x) => x.t === 'sem_visitas_socio').map((r) => ({ semana: r.f, club: r.c, visitas: red(r.v, 2) })) };
+}
+// Vacantes_CH: solo conteos por club, puesto, estatus y tipo (sin candidatos ni reclutadores)
+export function armaVacantes(F) {
+  const m = new Map(); for (const r of F.filter((x) => x.t.startsWith('vac_'))) { const [puesto, estatus, tipo] = String(r.k).split('|'); const key = r.c + '|' + r.k; if (!m.has(key)) m.set(key, { club: r.c, puesto, estatus, tipo, n: 0, dias: null }); m.get(key)[r.t === 'vac_n' ? 'n' : 'dias'] = r.t === 'vac_n' ? r.v : red(r.v, 1); }
+  return { fecha: F[0]?.f || null, filas: [...m.values()] };
+}
+// Encuesta Perfil del Socio (por región y año) y Encuesta de Satisfacción del personal 2025 (por club con 5 respuestas o más)
+export function armaPerfil(F) {
+  const preg = Object.fromEntries(F.filter((x) => x.t === 'pds_pregunta').map((r) => { const [v, p] = String(r.k).split('|'); return [v, p]; }));
+  return { preguntas: preg, base: F.filter((x) => x.t === 'pds_base').map((r) => ({ anio: r.f, region: r.c, n: r.v })),
+    resp: F.filter((x) => x.t === 'pds_resp').map((r) => { const i = String(r.k).indexOf('|'); return { anio: r.f, region: r.c, pregunta: String(r.k).slice(0, i), respuesta: String(r.k).slice(i + 1), n: r.v }; }) };
+}
+export function armaSatisf(F) {
+  return { grupos: F.filter((x) => x.t === 'sat_grupo').map((r) => ({ club: r.c, grupo: r.k, prom: red(r.v, 2) })), enps: F.filter((x) => x.t === 'sat_enps').map((r) => ({ club: r.c, clase: r.k, n: r.v })) };
 }
