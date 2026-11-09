@@ -27,7 +27,11 @@ export async function dax(env, dataset, query, imp = null) {
 
 // Estructura de los datasets (tablas, columnas y medidas con su fórmula). No trae filas de datos.
 export async function esquema(env) {
-  const out = { en: new Date().toISOString(), datasets: {} };
+  const out = { en: new Date().toISOString(), datasets: {}, diag: {} };
+  // Diagnóstico: qué ve la app en Power BI (sin datos)
+  const get = async (u) => { try { const r = await fetch('https://api.powerbi.com/v1.0/myorg/' + u, { headers: { Authorization: 'Bearer ' + (await token(env)) } }); const tx = await r.text(); return r.ok ? (JSON.parse(tx).value || []).map((x) => x.name + (x.isEffectiveIdentityRequired ? ' (RLS)' : '')) : r.status + ' ' + tx.slice(0, 160); } catch (e) { return String(e).slice(0, 160); } };
+  out.diag.grupos = await get('groups'); out.diag.datasets = await get(`groups/${PBI.workspace}/datasets`);
+  try { const p = JSON.parse(Buffer.from((await token(env)).split('.')[1], 'base64').toString()); out.diag.token = { aud: p.aud, roles: p.roles || null, scp: p.scp || null, appid: p.appid, oid: p.oid }; } catch {}
   for (const [nombre, ds] of [['gerentes', PBI.gerentes], ['ventas', PBI.ventas]]) {
     const o = { prueba: {} };
     for (const imp of [null, env.PBI_USUARIO || 'jair@fpt.com.mx']) { try { await dax(env, ds, 'EVALUATE ROW("x", 1)', imp); o.prueba[imp || 'app'] = 'ok'; } catch (e) { o.prueba[imp || 'app'] = String(e.message).slice(0, 160); } }
