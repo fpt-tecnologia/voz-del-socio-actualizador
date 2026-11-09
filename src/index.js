@@ -81,13 +81,14 @@ export async function correr(env, origen) {
     try { await paso('KPIs de clubes (Power BI)');
       const k = await kpisSharePoint(env);
       if (k && k.filas.length) {
-        // El flujo trae el cierre de cada mes de 2026 más el corte más reciente. Se guardan los cierres de mes y los cortes de los últimos 60 días.
+        // El flujo trae el cierre de cada mes y cada domingo de 2026 más el corte más reciente. Se guardan cierres de mes, domingos y los cortes de los últimos 14 días.
         const fc = k.filas.reduce((m, r) => (r.fecha_corte > m ? r.fecha_corte : m), ''); const prevK = (await leer(env, 'data/kpis_clubes.json', [])) || [];
         const nuevos = new Set(k.filas.map((r) => r.fecha_corte + '|' + r.club));
         const todas = [...prevK.filter((r) => !nuevos.has(r.fecha_corte + '|' + r.club)), ...k.filas];
         const cierre = {}; for (const r of todas) { const m = r.fecha_corte.slice(0, 7); if (!cierre[m] || r.fecha_corte > cierre[m]) cierre[m] = r.fecha_corte; }
-        const limite = new Date(Date.parse(fc + 'T12:00:00Z') - 60 * 864e5).toISOString().slice(0, 10);
-        const keep = todas.filter((r) => r.fecha_corte >= limite || cierre[r.fecha_corte.slice(0, 7)] === r.fecha_corte);
+        const limite = new Date(Date.parse(fc + 'T12:00:00Z') - 14 * 864e5).toISOString().slice(0, 10);
+        const domingo = (f) => new Date(f + 'T12:00:00Z').getUTCDay() === 0; // corte semanal (domingo)
+        const keep = todas.filter((r) => r.fecha_corte >= limite || domingo(r.fecha_corte) || cierre[r.fecha_corte.slice(0, 7)] === r.fecha_corte);
         await escribir(env, 'data/kpis_clubes.json', keep.sort((a, b) => (a.fecha_corte < b.fecha_corte ? -1 : a.fecha_corte > b.fecha_corte ? 1 : a.club.localeCompare(b.club))));
         const nHoy = k.filas.filter((r) => r.fecha_corte === fc).length, meses = new Set(k.filas.map((r) => r.fecha_corte.slice(0, 7))).size;
         await escribir(env, 'meta/powerbi.json', { en: ahora(), archivo: k.archivo, modificado: k.modificado, fecha_corte: fc, clubes: nHoy, meses, sin_mapear: k.sin_mapear });
