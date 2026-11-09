@@ -62,10 +62,42 @@ const r4 = (v) => (v == null || typeof v !== 'number' || !Number.isFinite(v) ? n
 export async function kpisSharePoint(env, carpeta = 'Voz del Socio/PowerBI') {
   const s = await sitio(env);
   const j = await g(env, `/sites/${s}/drive/root:/${carpeta.split('/').map(encodeURIComponent).join('/')}:/children?$top=200&$select=id,name,lastModifiedDateTime,file`);
-  const fs = (j.value || []).filter((f) => f.file && /\.json$/i.test(f.name)).sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
+  const fs = (j.value || []).filter((f) => f.file && /^kpis_.*\.json$/i.test(f.name)).sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
   if (!fs.length) return null;
   const raw = new TextDecoder().decode(await descargar(env, fs[0].id)).replace(/^\uFEFF/, '');
   return { archivo: fs[0].name, modificado: fs[0].lastModifiedDateTime, ...parseKpis(JSON.parse(raw)) };
+}
+
+// Archivos en formato largo (tipo, fecha, club, clave, valor) que deja el mismo flujo: extra_*.json (resto del tablero de gerentes) y ventas_*.json (Seg. Ventas)
+export async function largoSharePoint(env, prefijo, carpeta = 'Voz del Socio/PowerBI') {
+  const s = await sitio(env);
+  const j = await g(env, `/sites/${s}/drive/root:/${carpeta.split('/').map(encodeURIComponent).join('/')}:/children?$top=200&$select=id,name,lastModifiedDateTime,file`);
+  const re = new RegExp('^' + prefijo + '.*\\.json$', 'i');
+  const fs = (j.value || []).filter((f) => f.file && re.test(f.name)).sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
+  if (!fs.length) return null;
+  const raw = JSON.parse(new TextDecoder().decode(await descargar(env, fs[0].id)).replace(/^\uFEFF/, ''));
+  const rows = (Array.isArray(raw) ? raw : raw.firstTableRows || []).map(limpia);
+  const cache = new Map(); const club = (n) => { if (!cache.has(n)) cache.set(n, clubDe(n)?.club || n); return cache.get(n); };
+  return { archivo: fs[0].name, modificado: fs[0].lastModifiedDateTime, filas: rows.filter((r) => r.tipo).map((r) => ({ t: r.tipo, f: String(r.fecha || '').slice(0, 10), c: r.club ? club(r.club) : null, k: r.clave ?? '', v: typeof r.valor === 'number' ? r.valor : r.valor == null ? null : Number(r.valor) })) };
+}
+const red = (v, d = 4) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** d) / 10 ** d);
+export function armaExtra(F) {
+  const por = (t) => F.filter((r) => r.t === t);
+  const mapa = (ts, campos) => { const m = new Map(); for (const [t, campo] of ts) for (const r of por(t)) { const key = r.f + '|' + r.c; if (!m.has(key)) m.set(key, { fecha: r.f, club: r.c, ...campos }); m.get(key)[campo] = red(r.v); } return [...m.values()]; };
+  const rot = mapa([['rot_vol_1m', 'r1'], ['rot_vol_12m', 'r12']], { r1: null, r12: null });
+  const touch = mapa([['tp_staff', 'staff'], ['tp_entrenador', 'entrenador'], ['tp_limpieza', 'limpieza'], ['tp_areabc', 'areabc'], ['tp_mantenimiento', 'mantenimiento'], ['tp_equipos', 'equipos']], {});
+  const razones = por('cancel_razon').map((r) => { const [fa, rz] = String(r.k).split('|'); return { fecha: r.f, club: r.c, tipo: /aut/i.test(fa) ? 'aut' : 'vol', razon: rz || (/aut/i.test(fa) ? 'Automática' : 'Sin razón'), n: r.v }; });
+  const cobM = new Map(); for (const r of [...por('cobranza'), ...por('cobranza_meta')]) { const key = r.f + '|' + r.c + '|' + r.k; if (!cobM.has(key)) cobM.set(key, { fecha: r.f, club: r.c, concepto: r.k, tasa: null, meta: null }); cobM.get(key)[r.t === 'cobranza' ? 'tasa' : 'meta'] = red(r.v); }
+  const chM = new Map(); for (const r of por('sem_checkins')) { const key = r.f + '|' + r.c; if (!chM.has(key)) chM.set(key, { semana: r.f, club: r.c, bc: 0, cc: 0, otro: 0 }); const o = chM.get(key); o[r.k === 'Black Card' ? 'bc' : r.k === 'Classic Card' ? 'cc' : 'otro'] += r.v || 0; }
+  const amen = por('mes_amenidad').filter((r) => r.k && r.k !== 'Checkin').map((r) => ({ fecha: r.f, club: r.c, amenidad: r.k, n: r.v }));
+  const hs = por('hora_checkins'); const horas = { fecha: hs[0]?.f || null, filas: hs.map((r) => { const [d, h] = String(r.k).split('|'); return { club: r.c, dia: d, hora: Number(h), prom: red(r.v, 1) }; }) };
+  return { rot, touch, razones, cobranza: [...cobM.values()], checkins_sem: [...chM.values()], amenidades: amen, horas };
+}
+export function armaVentas(F) {
+  const semM = new Map(); for (const r of F.filter((x) => x.t.startsWith('sem_'))) { const key = r.f + '|' + r.c; if (!semM.has(key)) semM.set(key, { semana: r.f, club: r.c, total: 0, black: 0, web: 0, rewrite: 0 }); semM.get(key)[r.t.slice(4)] = r.v || 0; }
+  const repM = new Map(); for (const r of F.filter((x) => x.t.startsWith('rep_'))) { const [rep, cat] = String(r.k).split('|'); const key = r.f + '|' + r.c + '|' + r.k; if (!repM.has(key)) repM.set(key, { semana: r.f, club: r.c, rep, cat, total: 0, black: 0 }); repM.get(key)[r.t === 'rep_total' ? 'total' : 'black'] = r.v || 0; }
+  return { sem: [...semM.values()], reps: [...repM.values()], turno: F.filter((x) => x.t === 'mes_turno').map((r) => ({ fecha: r.f, club: r.c, turno: r.k, n: r.v })),
+    fuente: F.filter((x) => x.t === 'mes_fuente').map((r) => ({ fecha: r.f, club: r.c, fuente: r.k, n: r.v })), metas: F.filter((x) => x.t === 'meta_mes').map((r) => ({ fecha: r.f, club: r.c, meta: r.v })) };
 }
 export function parseKpis(rows) {
   if (!Array.isArray(rows)) rows = rows.firstTableRows || rows.value || rows.results?.[0]?.tables?.[0]?.rows || [];

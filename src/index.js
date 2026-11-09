@@ -8,7 +8,7 @@ import { descargarMenciones, aComentarios, SEMANAL, resumenSemanal, palabrasSema
 import { npsSemanal } from './qualtrics.js';
 import { generarComparativo } from './comparativo.js';
 import { generarRecomendaciones } from './recomendaciones.js';
-import { kpisSharePoint } from './powerbi.js';
+import { kpisSharePoint, largoSharePoint, armaExtra, armaVentas } from './powerbi.js';
 
 const DATASETS = ['comentarios', 'nps_semanal', 'nps_clubes', 'nps_mensual', 'sl_semanal', 'sl_canales', 'axol_semanal', 'mensual', 'insights', 'clubes', 'footprint_regiones', 'footprint_clubes', 'footprint_resumen', 'nps_ranking'];
 const MESES = { ENERO: '01', FEBRERO: '02', MARZO: '03', ABRIL: '04', MAYO: '05', JUNIO: '06', JULIO: '07', AGOSTO: '08', SEPTIEMBRE: '09', OCTUBRE: '10', NOVIEMBRE: '11', DICIEMBRE: '12' };
@@ -95,6 +95,11 @@ export async function correr(env, origen) {
         fuentes.push(`Power BI (tablero de gerentes): KPIs de ${nHoy} clubes al ${fc}${meses > 1 ? ` e histórico de ${meses} meses` : ''}`);
       } else await escribir(env, 'meta/powerbi.json', { en: ahora(), aviso: 'Aún no hay archivo del flujo de Power Automate en SharePoint' });
     } catch (e) { if (/404|itemNotFound/i.test(e.message)) await escribir(env, 'meta/powerbi.json', { en: ahora(), aviso: 'No existe la carpeta Voz del Socio/PowerBI en SharePoint' }); else errores.push('KPIs Power BI: ' + e.message); }
+    // 1d) Resto del tablero de gerentes (rotación, razones de cancelación, touchpoints, cobranza, saturación) y Seg. Ventas (ventas semanales, por representante, turno y fuente)
+    for (const [pref, nombre, arma, etiqueta] of [['extra_', 'pbi_extra', armaExtra, 'tablero de gerentes (rotación, razones de cancelación, touchpoints, cobranza y saturación)'], ['ventas_', 'pbi_ventas', armaVentas, 'Seg. Ventas (ventas semanales, por representante, turno y fuente)']]) {
+      try { const x = await largoSharePoint(env, pref); if (x && x.filas.length) { await escribir(env, `data/${nombre}.json`, { archivo: x.archivo, modificado: x.modificado, ...arma(x.filas) }); fuentes.push(`Power BI ${etiqueta}: ${x.filas.length} registros`); } }
+      catch (e) { errores.push(`Power BI ${nombre}: ` + e.message); }
+    }
 
     // 1b) Alertas de SentiOne por correo (no gastan créditos de la API): buzón compartido ALERTAS_MAILBOX
     if (env.ALERTAS_MAILBOX) try {
