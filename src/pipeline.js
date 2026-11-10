@@ -117,7 +117,7 @@ export async function correrPipeline(state, nuevos) {
     axol_semanal: merge(S('axol_semanal'), conSemana(secs.axol_semanal), (r) => r.periodo_fin),
     mensual: merge(S('mensual'), secs.mensual, (r) => k(r.mes, r.marca)),
     insights: merge(S('insights'), insN, (r) => r.id),
-    clubes: Object.entries(CLUBES).map(([club, v]) => ({ club, region: v[0], regional: REGIONAL[v[0]], region_regional: regReg(v[0]), ciudad: v[1] })),
+    clubes: [...Object.entries(CLUBES).map(([club, v]) => ({ club, region: v[0], regional: REGIONAL[v[0]], region_regional: regReg(v[0]), ciudad: v[1] })), ...(state.clubes || []).filter((c) => c && c.club && !CLUBES[c.club])],
   };
   const byFin = (a, b) => (a.periodo_fin < b.periodo_fin ? -1 : a.periodo_fin > b.periodo_fin ? 1 : 0);
   for (const n of ['nps_semanal', 'nps_clubes', 'sl_semanal', 'sl_canales', 'axol_semanal', 'insights']) out[n].sort(byFin);

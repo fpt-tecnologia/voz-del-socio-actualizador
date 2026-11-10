@@ -108,7 +108,7 @@ export function parseKpis(rows) {
     const d = new Date(fc + 'T12:00:00Z'); const diasMes = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate(); const ritmo = d.getUTCDate() / diasMes;
     const m = clubDe(r.Club_Name); if (!m) sinMapear.push(r.Club_Name);
     const vAv = r.ventas_meta_mes ? r.ventas_mtd / r.ventas_meta_mes : null, cUso = r.cancel_vol_meta_mes ? r.cancel_vol_mtd / r.cancel_vol_meta_mes : null;
-    return { fecha_corte: fc, fecha_desempeno: fp || null, club: m?.club || r.Club_Name, club_pbi: r.Club_Name, region: m?.region || null, ritmo_mes: r4(ritmo),
+    return { fecha_corte: fc, fecha_desempeno: fp || null, club: m?.club || r.Club_Name, club_pbi: r.Club_Name, region: m?.region || regionPbi(r.region_pbi), region_pbi: r.region_pbi || null, ritmo_mes: r4(ritmo),
       socios: r.socios, socios_avance_meta: r4(r.socios_avance_meta),
       ventas_mtd: r.ventas_mtd, ventas_meta_mes: r4(r.ventas_meta_mes), ventas_avance: r4(vAv), ventas_vs_ritmo: vAv != null && ritmo ? r4(vAv / ritmo) : null,
       black_mtd: r.black_mtd, black_pct: r.ventas_mtd ? r4(r.black_mtd / r.ventas_mtd) : null, black_meta: r4(r.black_meta),
@@ -119,8 +119,15 @@ export function parseKpis(rows) {
       cancel_aut_mtd: r.cancel_aut_mtd ?? null, cancel_aut_meta_mes: r4(r.cancel_aut_meta_mes), cancel_aut_pct: r4(r.cancel_aut_pct),
       nps_mes: r.nps_mes == null ? null : Math.round(r.nps_mes * 10) / 10, nps_3m: r.nps_3m == null ? null : Math.round(r.nps_3m * 10) / 10, nps_meta: r.nps_meta == null ? null : Math.round(r.nps_meta * 10) / 10 };
   });
+  // Los cortes de domingo (a mitad de mes) no traen las metas de cancelación ni de Black: se toman del corte más reciente del mismo mes
+  const ult = new Map(); for (const r of out) { const k = r.club + '|' + r.fecha_corte.slice(0, 7); const u = ult.get(k); if (!u || r.fecha_corte > u.fecha_corte) ult.set(k, r); }
+  for (const r of out) { const u = ult.get(r.club + '|' + r.fecha_corte.slice(0, 7)); if (!u || u === r) continue;
+    for (const f of ['cancel_vol_meta_mes', 'cancel_aut_meta_mes', 'black_meta_tablero', 'black_meta', 'nps_meta']) if (r[f] == null && u[f] != null) r[f] = u[f];
+    const cUso = r.cancel_vol_meta_mes ? r.cancel_vol_mtd / r.cancel_vol_meta_mes : null; r.cancel_uso_meta = r4(cUso); r.cancel_vs_ritmo = cUso != null && r.ritmo_mes ? r4(cUso / r.ritmo_mes) : null; }
   return { filas: out, sin_mapear: [...new Set(sinMapear)] };
 }
+// Región según Power BI (Aperturas): R1..R5 -> Región N; JEG se reporta dentro de Región 3
+export function regionPbi(v) { const s = String(v || '').trim().toUpperCase(); if (s === 'JEG') return 'Región 3'; const m = s.match(/^R(\d)$/); return m ? 'Región ' + m[1] : null; }
 
 // Contador_Socios: movimientos diarios agrupados por semana y perfil actual de los socios activos
 export function armaSocios(F) {

@@ -1,6 +1,7 @@
 // Actualizador del dashboard "Voz del Socio" — corre en GitHub Actions (sin Claude).
 // Horarios: L–V 10:41 y 15:41 (CDMX) y el botón "Actualizar ahora" del dashboard.
 import { correrPipeline, mergeFootprint, SECCIONES, norm, conRegion, semanaDe } from './pipeline.js';
+import { REGIONAL } from './catalogo.js';
 import { buscarCorreos, adjuntos, cuerpoTexto, buscarArchivos, descargar, correosDesde, cuerpoConLigas } from './graph.js';
 import { aTexto, esImagen, b64, pptxTexto } from './texto.js';
 import { extraerReporte, clasificarMenciones } from './ia.js';
@@ -91,6 +92,10 @@ export async function correr(env, origen) {
         const keep = todas.filter((r) => r.fecha_corte >= limite || domingo(r.fecha_corte) || cierre[r.fecha_corte.slice(0, 7)] === r.fecha_corte);
         await escribir(env, 'data/kpis_clubes.json', keep.sort((a, b) => (a.fecha_corte < b.fecha_corte ? -1 : a.fecha_corte > b.fecha_corte ? 1 : a.club.localeCompare(b.club))));
         const nHoy = k.filas.filter((r) => r.fecha_corte === fc).length, meses = new Set(k.filas.map((r) => r.fecha_corte.slice(0, 7))).size;
+        // Clubes nuevos que ya aparecen en Power BI pero no en el catálogo: se agregan con la región del tablero
+        const cat = (await leer(env, 'data/clubes.json', [])) || []; const yaEsta = new Set(cat.map((c) => c.club)); let agregados = 0;
+        for (const r of k.filas.filter((x) => x.fecha_corte === fc && x.region && !yaEsta.has(x.club))) { const reg = r.region; cat.push({ club: r.club, region: reg, regional: REGIONAL[reg] || '', region_regional: reg ? `${reg.replace('Región ', 'R')} · ${REGIONAL[reg] || ''}` : '', ciudad: '' }); yaEsta.add(r.club); agregados++; }
+        if (agregados) { await escribir(env, 'data/clubes.json', cat); state.clubes = cat; }
         await escribir(env, 'meta/powerbi.json', { en: ahora(), archivo: k.archivo, modificado: k.modificado, fecha_corte: fc, clubes: nHoy, meses, sin_mapear: k.sin_mapear });
         fuentes.push(`Power BI (tablero de gerentes): KPIs de ${nHoy} clubes al ${fc}${meses > 1 ? ` e histórico de ${meses} meses` : ''}`);
       } else await escribir(env, 'meta/powerbi.json', { en: ahora(), aviso: 'Aún no hay archivo del flujo de Power Automate en SharePoint' });
